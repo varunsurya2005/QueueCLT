@@ -1,0 +1,4 @@
+{
+  "id": "job1",
+  "command": "echo Hello from QueueCTL"
+}

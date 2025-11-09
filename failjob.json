@@ -1,0 +1,4 @@
+{
+  "id": "failjob",
+  "command": "exit 1"
+}
