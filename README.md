@@ -293,9 +293,15 @@ Expected: Workers stop after finishing current jobs.
 | Expecting instant worker stop | They finish current jobs first |
 
 ---
+## 🎥 Demo Video
+
+Watch a quick demo of **QueueCTL** in action:  
+[▶️ View Demo on Google Drive](https://drive.google.com/file/d/1de3F1l8nxNaDoI6oJmCPhoRuOIzTfjn0/view?usp=drive_link)
+
 
 ## Author
 **Developed by:** Varun Surya  
 **Contact:** varunsurya_cherukuri@srmap.edu.in 
 
 ---
+
