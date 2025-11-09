@@ -14,14 +14,17 @@ DB_PATH = "queue.db"
 
 # ----------------------- Helpers -----------------------
 def utcnow_iso():
+    """Return current UTC time in ISO format (Z suffix)."""
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 def connect():
+    """Create and return SQLite connection."""
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
 def new_worker_id():
+    """Generate random worker ID."""
     return f"w-{random.randint(10000,99999)}"
 
 # ----------------------- DB Init -----------------------
@@ -94,10 +97,10 @@ def enqueue_job(json_or_file):
         payload = json.loads(json_or_file)
 
     if "id" not in payload or "command" not in payload:
-        raise SystemExit("Error: Job must include 'id' and 'command'.")
+        raise SystemExit(" Error: Job must include 'id' and 'command'.")
 
     now = utcnow_iso()
-    run_at = payload.get("run_at", now)  # new feature: scheduling
+    run_at = payload.get("run_at", now)
 
     record = {
         "id": payload["id"],
@@ -115,23 +118,24 @@ def enqueue_job(json_or_file):
     conn = connect()
     try:
         with conn:
-            conn.execute("""INSERT INTO jobs
+            conn.execute("""
+                INSERT INTO jobs
                 (id,command,state,attempts,max_retries,created_at,updated_at,next_run_at,last_error,worker_id)
                 VALUES(:id,:command,:state,:attempts,:max_retries,:created_at,:updated_at,:next_run_at,:last_error,:worker_id)
             """, record)
         print(f"Enqueued job '{record['id']}' (scheduled at {run_at})")
     except sqlite3.IntegrityError:
-        print(f"Job '{record['id']}' already exists.")
+        print(f" Job '{record['id']}' already exists.")
     finally:
         conn.close()
 
 # ----------------------- Worker Management -----------------------
 def worker_start(count=1):
-    """Start N detached background workers that won't block the terminal."""
+    """Start N detached background workers."""
     for _ in range(count):
         cmd = [sys.executable, __file__, "worker", "_run"]
         subprocess.Popen(cmd, creationflags=subprocess.DETACHED_PROCESS if os.name == "nt" else 0)
-    print(f"Started {count} background worker(s)")
+    print(f" Started {count} background worker(s)")
 
 def worker_stop():
     conn = connect()
@@ -194,7 +198,7 @@ def try_process_one(worker_id):
         return False
 
     print(f"Processing job {job['id']}: {job['command']}")
-    timeout_seconds = int(get_config(connect(), "timeout_seconds", 10))  # new config
+    timeout_seconds = int(get_config(connect(), "timeout_seconds", 10))
     success, output = run_command(job["command"], timeout_seconds)
     with conn:
         if success:
@@ -207,7 +211,7 @@ def try_process_one(worker_id):
             base = int(get_config(conn, "backoff_base", 2))
             if attempts < max_retries:
                 delay = base ** attempts
-                next_run = datetime.now(timezone.utc).timestamp() + delay
+                next_run = time.time() + delay
                 next_run_iso = datetime.fromtimestamp(next_run, timezone.utc).isoformat().replace("+00:00", "Z")
                 conn.execute("""
                     UPDATE jobs SET state='pending', attempts=?, next_run_at=?, updated_at=?, last_error=? WHERE id=?
@@ -226,7 +230,7 @@ def try_process_one(worker_id):
     return True
 
 def run_command(cmd, timeout_seconds=10):
-    """Execute a command with timeout support."""
+    """Execute a shell command with timeout."""
     try:
         result = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout_seconds)
         if result.returncode == 0:
@@ -254,7 +258,7 @@ def dlq_retry(job_id):
     with conn:
         row = conn.execute("SELECT * FROM dlq WHERE id=?", (job_id,)).fetchone()
         if not row:
-            print(f"DLQ job '{job_id}' not found.")
+            print(f" DLQ job '{job_id}' not found.")
             return
         now = utcnow_iso()
         conn.execute("""
@@ -287,6 +291,31 @@ def status():
 
 # ----------------------- CLI -----------------------
 def main():
+    if len(sys.argv) == 1 or sys.argv[1] in ["help", "--help", "-h"]:
+        print("""
+Usage: python queuectl.py [command] [options]
+
+Available Commands:
+  init                     Initialize the job queue database
+  enqueue "<json>"         Add a new job to the queue
+  worker start --count N   Start N background worker processes
+  worker stop              Stop all running workers gracefully
+  list                     List all jobs and their states
+  status                   Show summary of jobs and active workers
+  dlq list                 View all jobs in the Dead Letter Queue
+  dlq retry <job_id>       Retry a job from DLQ
+  config get               Show current configuration
+  config set <key> <val>   Update configuration value
+
+Examples:
+  python queuectl.py init
+  python queuectl.py enqueue "@job1.json"
+  python queuectl.py worker start --count 2
+  python queuectl.py dlq list
+  python queuectl.py config set timeout-seconds 15
+""")
+        sys.exit(0)
+
     parser = argparse.ArgumentParser(prog="queuectl", description="CLI Job Queue System")
     sub = parser.add_subparsers(dest="cmd")
 
@@ -318,6 +347,7 @@ def main():
     p_set.add_argument("value")
 
     args = parser.parse_args()
+
     if args.cmd == "init": init_db()
     elif args.cmd == "enqueue": enqueue_job(args.payload)
     elif args.cmd == "worker":
